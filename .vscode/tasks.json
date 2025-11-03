@@ -1,0 +1,26 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Train YOLO",
+      "type": "shell",
+      "command": "python3 -m ultralytics detect train data=data/pet_head.yaml model=yolov8n.pt imgsz=640 epochs=80 batch=16 project=runs name=pet_head",
+      "problemMatcher": [],
+      "console": "integratedTerminal"
+    },
+    {
+      "label": "Train Embedder",
+      "type": "shell",
+      "command": "python3 scripts/train_embedder.py",
+      "problemMatcher": [],
+      "console": "integratedTerminal"
+    },
+    {
+      "label": "Enroll Gallery",
+      "type": "shell",
+      "command": "python3 scripts/enroll_gallery.py",
+      "problemMatcher": [],
+      "console": "integratedTerminal"
+    }
+  ]
+}

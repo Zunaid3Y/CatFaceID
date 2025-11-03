@@ -1,0 +1,5 @@
+path: .
+train: data/splits/train/images
+val: data/splits/val/images
+names:
+  - cat_head

@@ -1,0 +1,47 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Train YOLO",
+      "type": "python",
+      "request": "launch",
+      "module": "ultralytics",
+      "args": [
+        "detect",
+        "train",
+        "data=data/pet_head.yaml",
+        "model=yolov8n.pt",
+        "imgsz=640",
+        "epochs=80",
+        "batch=16",
+        "project=runs",
+        "name=pet_head"
+      ],
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Train Embedder",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/scripts/train_embedder.py",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Infer test.jpg",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/scripts/infer.py",
+      "args": [
+        "test.jpg"
+      ],
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Cam Demo",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/scripts/cam_demo.py",
+      "console": "integratedTerminal"
+    }
+  ]
+}

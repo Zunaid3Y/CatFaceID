@@ -1,0 +1,19 @@
+# Local/large
+runs/
+data/_external/
+data/kaggle/
+__pycache__/
+*.DS_Store
+
+# Optional: keep gallery but allow committing vectors via LFS
+# If you prefer not to commit gallery, uncomment:
+# gallery/
+
+# Virtualenv and other dirs
+.venv/
+models/
+data/raw/
+data/labels/
+data/crops/
+data/splits/
+.DS_Store

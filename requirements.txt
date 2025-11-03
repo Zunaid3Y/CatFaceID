@@ -1,0 +1,17 @@
+torch
+torchvision
+torchaudio
+opencv-python
+pillow
+timm
+albumentations
+ultralytics
+matplotlib
+scikit-learn
+tqdm
+fastapi
+uvicorn
+faiss-cpu
+onnx
+onnxruntime
+onnxsim
