@@ -17,3 +17,22 @@ data/labels/
 data/crops/
 data/splits/
 .DS_Store
+# venv & OS
+.venv/
+__pycache__/
+.DS_Store
+
+# training runs & big artifacts
+runs/
+*.pt
+*.onnx
+*.mlpackage
+*.npy
+*.npz
+
+# local data
+data/
+gallery/
+
+# ignore Python virtualenv (local)
+.venv311/
