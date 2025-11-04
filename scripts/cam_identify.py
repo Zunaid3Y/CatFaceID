@@ -21,8 +21,9 @@ import torch.nn.functional as F
 from PIL import Image
 
 
-GALLERY_VECTORS = Path("gallery") / "vectors.npy"
-GALLERY_LABELS = Path("gallery") / "labels.json"
+GALLERY_BASE = os.getenv("GALLERY_DIR", "gallery")
+GALLERY_VECTORS = Path(GALLERY_BASE) / "vectors.npy"
+GALLERY_LABELS = Path(GALLERY_BASE) / "labels.json"
 YOLO_WEIGHTS = Path("runs/cat_head/weights/best.pt")
 SNAP_DIR = Path("runs/identify_snaps")
 

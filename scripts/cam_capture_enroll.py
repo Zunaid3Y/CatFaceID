@@ -28,7 +28,8 @@ def get_device() -> str:
 
 def main() -> None:
     pet_id = input("Enter pet ID: ").strip() or "unnamed"
-    out_dir = Path("data/faceid") / pet_id
+    base_dir = os.getenv("DATA_DIR", "data")
+    out_dir = Path(base_dir) / "faceid" / pet_id
     out_dir.mkdir(parents=True, exist_ok=True)
 
     cap = cv2.VideoCapture(0)

@@ -1,4 +1,96 @@
-const API = "http://127.0.0.1:9000";
+// Same-origin API base when served by FastAPI at '/'
+const API = ""; // use relative paths like /identify, /enroll
+
+// Convert any File/Blob to a resized JPEG Blob via canvas
+async function fileToJpegBlob(file, maxSide = 1024, quality = 0.9) {
+  const dataURL = await new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+  const img = await new Promise((resolve, reject) => {
+    const el = new Image();
+    el.onload = () => resolve(el);
+    el.onerror = reject;
+    el.src = dataURL;
+  });
+  const w = img.naturalWidth || img.width;
+  const h = img.naturalHeight || img.height;
+  let outW = w, outH = h;
+  if (Math.max(w, h) > maxSide) {
+    const s = maxSide / Math.max(w, h);
+    outW = Math.round(w * s);
+    outH = Math.round(h * s);
+  }
+  const canvas = document.createElement('canvas');
+  canvas.width = outW; canvas.height = outH;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, 0, 0, outW, outH);
+  const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', quality));
+  if (!blob) throw new Error('JPEG encode failed');
+  return blob;
+}
+
+// HTTP helpers
+async function enroll(petId, files) {
+  const fd = new FormData();
+  fd.append("pet_id", petId);
+  for (const f of files) {
+    if (!f || !f.size) continue; // skip empty
+    let blob;
+    try {
+      blob = await fileToJpegBlob(f, 1024, 0.9);
+    } catch (e) {
+      console.warn('convert failed, sending raw file', e);
+      blob = f; // fallback
+    }
+    if (blob.size < 10_000) continue; // skip tiny/blank frames
+    const name = (f && f.name ? f.name : 'frame') + '.jpg';
+    fd.append("images", new File([blob], name, { type: 'image/jpeg' }));
+  }
+  const res = await fetch(`${API}/enroll`, { method: "POST", body: fd });
+  if (!res.ok) throw new Error(`Enroll failed (${res.status}): ${await res.text()}`);
+  return res.json();
+}
+
+async function identifyFile(file) {
+  const fd = new FormData();
+  fd.append("image", file); // field name must be "image"
+  const res = await fetch(`${API}/identify`, { method: "POST", body: fd });
+  if (!res.ok) throw new Error(`Identify failed (${res.status}): ${await res.text()}`);
+  return res.json(); // {label, score, top3}
+}
+
+// Continuously capture frames from a video element and identify.
+function startCameraIdentify(videoEl, canvasEl, outEl) {
+  const ctx = canvasEl.getContext("2d");
+  let inFlight = false;
+  const timer = setInterval(async () => {
+    const vw = videoEl.videoWidth|0, vh = videoEl.videoHeight|0;
+    if(!vw || !vh || inFlight) return;
+    // Downscale frame to reduce upload and inference load
+    const maxW = 480;
+    const scale = Math.min(1, maxW / vw);
+    const w = Math.max(1, Math.round(vw * scale));
+    const h = Math.max(1, Math.round(vh * scale));
+    canvasEl.width = w; canvasEl.height = h;
+    ctx.drawImage(videoEl, 0, 0, w, h);
+    const blob = await new Promise(r => canvasEl.toBlob(r, "image/jpeg", 0.7));
+    if(!blob) return;
+    const fd = new FormData();
+    fd.append("image", blob, "frame.jpg");
+    try{
+      inFlight = true;
+      const res = await fetch(`${API}/identify`, { method: "POST", body: fd });
+      if (!res.ok) { outEl.textContent = `Identify failed (${res.status})`; return; }
+      const { label, score } = await res.json();
+      outEl.textContent = `${label} (${(score*100).toFixed(1)}%)`;
+    }catch(err){ outEl.textContent = String(err.message||err); }
+    finally{ inFlight = false; }
+  }, 1200);
+  return timer;
+}
 
 // Elements
 const tabIdentify = document.getElementById("tab-identify");
@@ -31,6 +123,7 @@ const enrGallery = document.getElementById("enr-gallery");
 
 // Camera state
 let idStream = null;
+let idIdentifyTimer = null;
 let enrStream = null;
 let enrollBlobs = []; // blobs to upload
 
@@ -58,7 +151,15 @@ tabEnroll.addEventListener('click', ()=>switchTab('enroll'));
 
 // Camera helpers
 async function startStream(videoEl){
-  const constraints = { video: { facingMode: 'user' }, audio: false };
+  const constraints = {
+    video: {
+      facingMode: 'user',
+      width: { ideal: 640 },
+      height: { ideal: 480 },
+      frameRate: { ideal: 15 }
+    },
+    audio: false
+  };
   const stream = await navigator.mediaDevices.getUserMedia(constraints);
   videoEl.srcObject = stream;
   await videoEl.play().catch(()=>{});
@@ -99,10 +200,15 @@ idUseCam.addEventListener('change', async (e)=>{
   if(e.target.checked){
     try{
       idStream = await startStream(idVideo);
-      idVideo.hidden = false;
+      // Drive predictions from canvas; keep the <video> hidden
+      idVideo.hidden = true;
+      idCanvas.hidden = false;
       idCapture.disabled = false;
       idPreview.hidden = true;
-      idCanvas.hidden = true;
+      // Start continuous identify loop if not already running
+      if(!idIdentifyTimer){
+        idIdentifyTimer = startCameraIdentify(idVideo, idCanvas, statusEl);
+      }
     }catch(err){
       setStatus('Camera permission denied or not available', true);
       e.target.checked = false;
@@ -110,6 +216,7 @@ idUseCam.addEventListener('change', async (e)=>{
   } else {
     idVideo.hidden = true; idCapture.disabled = true; idCanvas.hidden = true;
     stopStream(idStream); idStream = null;
+    if(idIdentifyTimer){ clearInterval(idIdentifyTimer); idIdentifyTimer = null; }
   }
 });
 
@@ -125,7 +232,7 @@ idFile.addEventListener('change', ()=>{
 });
 
 idRun.addEventListener('click', async ()=>{
-  setStatus('Identifying...');
+  statusEl.textContent = 'Identifying...';
   try{
     let blob = null;
     if(!idCanvas.hidden && idCanvas.width>0){
@@ -133,16 +240,12 @@ idRun.addEventListener('click', async ()=>{
     } else {
       blob = blobFromFileInput(idFile);
     }
-    if(!blob) { setStatus('Please capture or select an image', true); return; }
+    if(!blob) { statusEl.textContent = 'Please capture or select an image'; return; }
 
-    const fd = new FormData();
-    fd.append('image', blob, 'frame.jpg');
-    const resp = await fetch(`${API}/identify`, { method:'POST', body: fd });
-    if(!resp.ok){ throw new Error(`HTTP ${resp.status}`); }
-    const js = await resp.json();
-    renderIdentify(js);
-    setStatus('Done.');
-  }catch(err){ setStatus(`Error: ${err.message}`, true); }
+    const res = await identifyFile(blob);
+    renderIdentify(res);
+    statusEl.textContent = 'Identify OK!';
+  }catch(e){ statusEl.textContent = e.message; }
 });
 
 function renderIdentify(js){
@@ -241,9 +344,19 @@ enrCapture.addEventListener('click', ()=>{
   }
 });
 
-enrFiles.addEventListener('change', ()=>{
+enrFiles.addEventListener('change', async ()=>{
   const files = Array.from(enrFiles.files || []);
-  files.forEach(f=>enrollBlobs.push(f));
+  for (const f of files) {
+    if (!f || !f.size) continue;
+    try {
+      // Convert to JPEG for consistent preview and upload size
+      const jpeg = await fileToJpegBlob(f, 1024, 0.9);
+      enrollBlobs.push(new File([jpeg], (f.name || 'frame') + '.jpg', { type: 'image/jpeg' }));
+    } catch (e) {
+      console.warn('preview convert failed, using original', e);
+      enrollBlobs.push(f);
+    }
+  }
   refreshEnrollGallery();
 });
 
@@ -275,18 +388,14 @@ function refreshEnrollGallery(){
 
 enrUpload.addEventListener('click', async ()=>{
   const petId = (enrPetId.value||'').trim();
-  if(!petId){ setStatus('Enter a pet_id first.', true); return; }
-  if(!enrollBlobs.length){ setStatus('No images to upload.', true); return; }
-  setStatus('Uploading & rebuilding gallery...');
+  if(!petId){ statusEl.textContent = 'Enter a pet_id first.'; return; }
+  if(!enrollBlobs.length){ statusEl.textContent = 'No images to upload.'; return; }
+  statusEl.textContent = 'Uploading & rebuilding gallery...';
   try{
-    const fd = new FormData();
-    fd.append('pet_id', petId);
-    enrollBlobs.forEach((b, i)=> fd.append('images', b, `enr_${i}.jpg`));
-    const resp = await fetch(`${API}/enroll`, { method:'POST', body: fd });
-    if(!resp.ok){ throw new Error(`HTTP ${resp.status}`); }
-    const js = await resp.json();
-    setStatus(`Enroll complete. Saved=${js.saved} for pet_id=${js.pet_id}`);
+    const files = enrollBlobs;
+    const res = await enroll(petId, files);
+    statusEl.textContent = `Enroll OK: saved ${res.saved}`;
     // Reset local set
     enrollBlobs = []; refreshEnrollGallery();
-  }catch(err){ setStatus(`Error: ${err.message}`, true); }
+  }catch(e){ statusEl.textContent = e.message; }
 });

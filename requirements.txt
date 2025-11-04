@@ -10,8 +10,10 @@ matplotlib
 scikit-learn
 tqdm
 fastapi
-uvicorn
+uvicorn[standard]
 faiss-cpu
 onnx
 onnxruntime
 onnxsim
+python-multipart
+pillow-heif
