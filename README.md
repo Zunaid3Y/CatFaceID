@@ -1,6 +1,6 @@
 # CatFaceID
 
-Open‑set face identification for cats. Includes training hooks, enrollment, live identification, and a simple web UI.
+Open‑set face identification for cats. Includes training hooks, enrollment, and live identification via a FastAPI backend.
 
 ## Features
 
@@ -11,7 +11,7 @@ Open‑set face identification for cats. Includes training hooks, enrollment, li
 - Quality filter (blur/size) to skip low‑quality frames.
 - Threshold sweeper (FAR/FRR) to choose good reject/margin settings.
 
-## Local Quickstart
+## Local Quickstart (Backend Only)
 
 ```bash
 python3 -m venv .venv
@@ -27,21 +27,35 @@ python3 scripts/enroll_gallery.py
 # Start API (FastAPI/uvicorn) on :9000
 python3 api/server.py
 
-# Serve the frontend on :8000 (in another shell)
-cd web && python3 -m http.server 8000
 ```
 
-Open https://zunaid3y.github.io/CatFaceID/ to use the UI. The backend runs on http://127.0.0.1:9000.
+The backend runs on http://127.0.0.1:9000.
 
-## Frontend API Base
+## API Usage Examples
 
-The web UI calls the backend using a base URL in `web/app.js`:
+Identify an image:
 
-```js
-const API = "http://127.0.0.1:9000";
+```bash
+curl -s -X POST \
+  -F "image=@/path/to/cat.jpg" \
+  http://127.0.0.1:9000/identify | jq .
 ```
 
-Change this if you deploy the API elsewhere.
+Enroll images for a pet (rebuilds gallery):
+
+```bash
+curl -s -X POST \
+  -F "pet_id=mittens" \
+  -F "images=@/path/to/mittens1.jpg" \
+  -F "images=@/path/to/mittens2.jpg" \
+  http://127.0.0.1:9000/enroll | jq .
+```
+
+Health check:
+
+```bash
+curl -s http://127.0.0.1:9000/health
+```
 
 ## Enroll and Identify
 
@@ -50,9 +64,6 @@ Change this if you deploy the API elsewhere.
 - Camera capture (CLI):
   - `python3 scripts/cam_capture_enroll.py` to save crops into `data/faceid/<pet_id>/` and auto‑rebuild the gallery.
   - `python3 scripts/cam_identify.py` for live identification (press S to snapshot overlays).
-- Web UI:
-  - Enroll tab lets you capture/select images, add to a set, and upload to the API (`/enroll`) to rebuild the gallery.
-  - Identify tab lets you upload or capture, then calls the API (`/identify`).
 
 ## Data Locations
 
@@ -69,10 +80,8 @@ Open‑set rules are enforced during identification:
 
 ## Deployment Notes
 
-- API: `api/server.py` (FastAPI). Add your frontend origin to CORS in `api/server.py`.
-- Frontend: serve `web/` statically (e.g., Netlify). Update `web/app.js` API base.
-- One simple setup: Deploy API on Render/Fly/Heroku, serve UI on Netlify/Vercel.
-- Tunnels for local demos: Cloudflare Tunnel or ngrok pointing frontend and backend ports to public URLs.
+- API: `api/server.py` (FastAPI). Configure CORS if calling from external tools.
+- For remote demos, you can expose the API via a tunnel (Cloudflare Tunnel, ngrok) and call its endpoints directly.
 
 ## Extras
 
